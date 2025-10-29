@@ -1,51 +1,76 @@
 const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
 
-const db = new sqlite3.Database('./totally_not_my_privateKeys.db', (err) => {
-    if (err) console.error("DB Error:", err);
-    else console.log("✅ Connected to SQLite DB");
-});
+const dbPath = path.join(__dirname, 'keys.db');
+const db = new sqlite3.Database(dbPath);
 
-db.run(`
-CREATE TABLE IF NOT EXISTS keys (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    private_key TEXT NOT NULL,
-    expired_at DATETIME
-)`, (err) => {
-    if (err) console.error("❌ Table creation failed:", err);
-});
-
-// ✅ INSERT a key into DB
-db.insertKey = (kid, privateKey, expires) => {
-    return new Promise((resolve, reject) => {
-        db.run(
-            `INSERT INTO keys (id, private_key, expired_at) VALUES (?, ?, ?)`,
-            [kid, privateKey, new Date(expires * 1000)],
-            function(err) {
-                if (err) reject(err);
-                else resolve(this.lastID);
-            }
-        );
+function init() {
+  return new Promise((resolve, reject) => {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS keys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kid TEXT UNIQUE,
+        private_key TEXT,
+        public_key TEXT,
+        expired BOOLEAN DEFAULT 0
+      );
+    `, (err) => {
+      if (err) {
+        console.error("❌ Error creating table:", err);
+        reject(err);
+      } else {
+        console.log("✅ Table ready");
+        resolve();
+      }
     });
-};
+  });
+}
 
-// ✅ GET ALL KEYS
-db.getAllKeys = () => {
+module.exports = {
+  ready: init(), // <-- ensures table is created before queries
+
+  insertKey(kid, privateKey, publicKey, expired = false) {
     return new Promise((resolve, reject) => {
-        db.all(`SELECT * FROM keys`, (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-        });
+      db.run(
+        `INSERT INTO keys (kid, private_key, public_key, expired)
+         VALUES (?, ?, ?, ?)`,
+        [kid, privateKey, publicKey, expired ? 1 : 0],
+        function(err) {
+          if (err) reject(err);
+          else resolve(this.lastID);
+        }
+      );
     });
-};
+  },
+  
+  
 
-// ✅ GET KEY BY ID
-db.getKeyById = (kid) => {
+  getKey(expired) {
     return new Promise((resolve, reject) => {
-        db.get(`SELECT * FROM keys WHERE id = ?`, [kid], (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-        });
+      db.get(
+        "SELECT * FROM keys WHERE expired = ? LIMIT 1",
+        [expired ? 1 : 0],
+        (err, row) => err ? reject(err) : resolve(row)
+      );
     });
-};
+  },
 
-module.exports = db;
+  getPublicKeys() {
+    return new Promise((resolve, reject) => {
+      db.all(
+        "SELECT kid, public_key AS x5c FROM keys WHERE expired = 0",
+        [],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows.map(r => ({
+            kty: "RSA",
+            kid: r.kid,
+            alg: "RS256",
+            use: "sig",
+            x5c: [r.x5c]
+          })));
+        }
+      );
+    });
+  }
+};
