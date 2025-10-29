@@ -1,76 +1,63 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
-const dbPath = path.join(__dirname, 'keys.db');
-const db = new sqlite3.Database(dbPath);
+const DB_PATH = path.join(__dirname, 'totally_not_my_privateKeys.db');
+const db = new sqlite3.Database(DB_PATH);
 
-function init() {
+const ready = new Promise((resolve, reject) => {
+  db.run(
+    `CREATE TABLE IF NOT EXISTS keys(
+       kid INTEGER PRIMARY KEY AUTOINCREMENT,
+       key BLOB NOT NULL,
+       exp INTEGER NOT NULL
+     )`,
+    err => err ? reject(err) : resolve()
+  );
+});
+
+// INSERT private key
+function insertKey(pemPrivateKey, expEpochSeconds) {
   return new Promise((resolve, reject) => {
-    db.run(`
-      CREATE TABLE IF NOT EXISTS keys (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        kid TEXT UNIQUE,
-        private_key TEXT,
-        public_key TEXT,
-        expired BOOLEAN DEFAULT 0
-      );
-    `, (err) => {
-      if (err) {
-        console.error("❌ Error creating table:", err);
-        reject(err);
-      } else {
-        console.log("✅ Table ready");
-        resolve();
-      }
-    });
+    db.run(
+      `INSERT INTO keys (key, exp) VALUES (?, ?)`,
+      [pemPrivateKey, expEpochSeconds],
+      function(err) { err ? reject(err) : resolve(this.lastID); }
+    );
+  });
+}
+
+// Fetch ONE key depending on expired flag
+function getKey(expired) {
+  return new Promise((resolve, reject) => {
+    const now = Math.floor(Date.now() / 1000);
+
+    const sql = expired
+      ? `SELECT kid, key, exp FROM keys WHERE exp <= ? ORDER BY exp DESC LIMIT 1`
+      : `SELECT kid, key, exp FROM keys WHERE exp >  ? ORDER BY exp ASC  LIMIT 1`;
+
+    db.get(sql, [now], (err, row) =>
+      err ? reject(err) : resolve(row || null)
+    );
+  });
+}
+
+// Fetch ONLY unexpired keys for JWKS
+function getValidKeys() {
+  return new Promise((resolve, reject) => {
+    const now = Math.floor(Date.now() / 1000);
+    db.all(
+      `SELECT kid, key, exp FROM keys WHERE exp > ? ORDER BY exp ASC`,
+      [now],
+      (err, rows) => err ? reject(err) : resolve(rows || [])
+    );
   });
 }
 
 module.exports = {
-  ready: init(), // <-- ensures table is created before queries
-
-  insertKey(kid, privateKey, publicKey, expired = false) {
-    return new Promise((resolve, reject) => {
-      db.run(
-        `INSERT INTO keys (kid, private_key, public_key, expired)
-         VALUES (?, ?, ?, ?)`,
-        [kid, privateKey, publicKey, expired ? 1 : 0],
-        function(err) {
-          if (err) reject(err);
-          else resolve(this.lastID);
-        }
-      );
-    });
-  },
-  
-  
-
-  getKey(expired) {
-    return new Promise((resolve, reject) => {
-      db.get(
-        "SELECT * FROM keys WHERE expired = ? LIMIT 1",
-        [expired ? 1 : 0],
-        (err, row) => err ? reject(err) : resolve(row)
-      );
-    });
-  },
-
-  getPublicKeys() {
-    return new Promise((resolve, reject) => {
-      db.all(
-        "SELECT kid, public_key AS x5c FROM keys WHERE expired = 0",
-        [],
-        (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows.map(r => ({
-            kty: "RSA",
-            kid: r.kid,
-            alg: "RS256",
-            use: "sig",
-            x5c: [r.x5c]
-          })));
-        }
-      );
-    });
-  }
+  db,
+  ready,
+  insertKey,
+  getKey,
+  getValidKeys,
+  DB_PATH
 };

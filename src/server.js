@@ -1,19 +1,25 @@
 const express = require('express');
 const routes = require('./routes');
+const { ready, db } = require('../db');
+const { seed } = require('./seed_keys');
 
 const app = express();
-
 app.use(express.json());
 app.use('/', routes);
 
 const PORT = 8080;
 
-// Only start the server if NOT in test mode
-if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log(`✅ JWKS Server running on http://localhost:${PORT}`);
-    });
-}
+(async () => {
+  await ready;
 
-// Export app for Jest testing
-module.exports = app;
+  // seed if empty
+  db.get(`SELECT COUNT(*) as c FROM keys`, (err, row) => {
+    if (err) {
+      console.error(err);
+    } else if (row.c === 0) {
+      seed().catch(console.error);
+    }
+  });
+
+  app.listen(PORT, () => console.log(`✅ JWKS Server running on http://localhost:${PORT}`));
+})();

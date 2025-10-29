@@ -1,25 +1,18 @@
-const db = require('../db');
-const fs = require('fs');
-const path = require('path');
+const { ready, insertKey, getKey } = require('../db');
+const forge = require('node-forge');
 
 async function seed() {
-  await db.ready; // ✅ Wait for table creation
+  await ready;
 
-  console.log("✅ Table is ready, inserting keys...");
+  const pair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
 
-  const privateKeyPath = path.join(__dirname, '../keys/private_key.pem');
-  const publicKeyPath = path.join(__dirname, '../keys/public_key.pem');
+  const privatePem = forge.pki.privateKeyToPem(pair.privateKey);
+  const now = Math.floor(Date.now() / 1000);
 
-  const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
-  const publicKey = fs.readFileSync(publicKeyPath, 'utf8');
+  await insertKey(privatePem, now + 3600);  // valid key
+  await insertKey(privatePem, now - 10);    // expired key
 
-  // Insert valid key
-  await db.insertKey('kid_valid', privateKey, publicKey, false);
-
-  // Insert expired key
-  await db.insertKey('kid_expired', privateKey, publicKey, true);
-
-  console.log("✅ Keys seeded successfully!");
+  console.log("✅ DB seeded: valid + expired");
 }
 
-seed().catch(err => console.error(err));
+module.exports = { seed };
