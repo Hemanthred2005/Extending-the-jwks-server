@@ -115,3 +115,15 @@ Confirms JWKS discovery endpoint is served correctly.
 
 curl http://localhost:8080/.well-known/jwks.json
 ---
+
+###  GradeBot Results
+
+![Gradebot](./screenshots/gradebot_passed.png)
+
+---
+
+###  GradeBot Results
+
+![Gradebot](./screenshots/tests_passed.png)
+
+---
