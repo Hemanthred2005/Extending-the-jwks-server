@@ -7,19 +7,35 @@ const app = express();
 app.use(express.json());
 app.use('/', routes);
 
-const PORT = 8080;
+// Export app for tests (NO .listen here)
+module.exports = app;
 
-(async () => {
+async function bootstrap() {
   await ready;
 
-  // seed if empty
-  db.get(`SELECT COUNT(*) as c FROM keys`, (err, row) => {
+  db.get(`SELECT COUNT(*) as c FROM keys`, async (err, row) => {
     if (err) {
-      console.error(err);
-    } else if (row.c === 0) {
-      seed().catch(console.error);
+      console.error("DB check error:", err);
+      return;
+    }
+    if (row.c === 0) {
+      console.log("⚠️ No keys → Seeding…");
+      try {
+        await seed();
+        console.log("✅ DB seeded");
+      } catch (seedErr) {
+        console.error("Seed failure:", seedErr);
+      }
     }
   });
+}
 
-  app.listen(PORT, () => console.log(`✅ JWKS Server running on http://localhost:${PORT}`));
-})();
+// ✅ Only start listener if NOT running in tests
+if (require.main === module) {
+  const PORT = 8080;
+  bootstrap().then(() => {
+    app.listen(PORT, () => 
+      console.log(`✅ JWKS Server running on http://localhost:${PORT}`)
+    );
+  });
+}

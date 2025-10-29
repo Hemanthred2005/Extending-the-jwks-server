@@ -98,31 +98,20 @@ Below are the required evidences for successful implementation:
 Demonstrates valid token issuance with correct claims.
 ![Valid Token](./screenshots/auth_valid.png)
 
+curl -X POST -u userABC:password123 "http://localhost:8080/auth"
+
 ---
 
 ###  Expired JWT Token Response (`/auth?expired=true`)
 Shows expired token logic works for negative testing.
 ![Expired Token](./screenshots/auth_expired.png)
 
+curl -X POST -u userABC:password123 "http://localhost:8080/auth?expired=true"
 ---
 
 ###  JWKS Public Keys (`/.well-known/jwks.json`)
 Confirms JWKS discovery endpoint is served correctly.
 ![JWKS](./screenshots/jwks.png)
 
+curl http://localhost:8080/.well-known/jwks.json
 ---
-
-###  SQLite Database Content (`keys.db`)
-Proves private keys are securely stored + expired flag usage.
-```sql
-.tables
-select * from keys;
-
- 
-
-screenshots/
-├─ auth_valid.png
-├─ auth_expired.png
-├─ jwks.png
-├─ db.png
-├─ tests_passed.png
